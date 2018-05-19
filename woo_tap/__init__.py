@@ -26,15 +26,17 @@ CONFIG = {
 }
 
 ENDPOINTS = {
-    "orders":"/wp-json/wc/v2/orders?after={0}"
+    "orders":"orders?after={0}&page={1}"
 }
 
-def get_url(endpoint, kwargs):
+def get_endpoint(endpoint, kwargs):
     '''Get the full url for the endpoint'''
     if endpoint not in ENDPOINTS:
         raise ValueError("Invalid endpoint {}".format(endpoint))
-
-    return BASE_URL + ENDPOINTS[endpoint].format(kwargs)
+    
+    after = urllib.parse.quote(kwargs[0])
+    page = kwargs[1]
+    return ENDPOINTS[endpoint].format(after,page)
 
 def get_start(STATE, tap_stream_id, bookmark_key):
     current_bookmark = singer.get_bookmark(STATE, tap_stream_id, bookmark_key)
@@ -48,45 +50,46 @@ def load_schema(entity):
 
     return schema
 
-def gen_request(STATE, endpoint, params=None):
-    '''Generate a request that will iterate through the results
-    and paginate through the responses until the amount of results
-    returned is less than 100, the amount returned by the API.
-    If the source has 'contact' in it, Autopilot API will provide a
-    'bookmark' property at the top level that is used to paginate
-    results
-    The API only returns bookmarks for iterating through contacts
-    '''
-    params = params or {}
+def filter_order(order):
+    filtered = {
+        "order_id":order["id"],
+        "order_key":order["order_key"],
+        "status":order["status"],
+        "date_created":order["date_created"],
+        "date_modified":order["date_modified"],
+        "discount_total":order["discount_total"],
+        "shipping_total":order["shipping_total"],
+        "total":order["total"],
+        "line_items":order["line_items"]
+    }
+    return filtered
 
-    source = parse_source_from_url(endpoint)
-    source_key = parse_key_from_source(source)
-
-    with metrics.record_counter(source) as counter:
-        while True:
-            data = request(endpoint, params).json()
-            if 'contact' in source:
-                if "bookmark" in data:
-                    params["bookmark"] = data["bookmark"]
-
-                else:
-                    params = {}
-
-            for row in data[source_key]:
-                counter.increment()
-                yield row
-            
-            if len(data[source_key]) < PER_PAGE:
-                params = {}
-                break
 
 def sync_orders(STATE, catalog):
+    wcapi = API(
+        url=CONFIG["url"],
+        consumer_key=CONFIG["consumer_key"],
+        consumer_secret=CONFIG["consumer_secret"],
+        wp_api=True,
+        version="wc/v2"
+    )
     schema = load_schema("orders")
-    singer.write_schema("orders", schema, ["id"], catalog.stream_alias)
+    singer.write_schema("orders", schema, ["order_id"], catalog.stream_alias)
 
     start = get_start(STATE, "contacts", "start_date")
-    print(start)
-    max_updated_at = start
+    last_update = start
+    counter = 1
+    while True:
+        endpoint = get_endpoint("orders", [start, counter])
+        print(endpoint)
+        orders = wcapi.get(endpoint).json()
+        for order in orders:
+            #prob need to convert dates to insure they are comparable
+            if("date_created" in order) and (order["date_created"] > start):
+                last_update = order["date_created"]
+            order = filter_order(order)
+            print(order)
+        break
 
 @attr.s
 class Stream(object):

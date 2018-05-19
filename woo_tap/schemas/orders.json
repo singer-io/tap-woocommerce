@@ -1,7 +1,7 @@
 {
     "type": "object",
     "properties": {
-        "id": {
+        "order_id": {
             "type": ["null", "number"]
         },
         "order_key": {
