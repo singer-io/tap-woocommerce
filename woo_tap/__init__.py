@@ -78,9 +78,9 @@ def sync_orders(STATE, catalog):
 
     start = get_start(STATE, "contacts", "start_date")
     last_update = start
-    counter = 1
+    page_number = 1
     while True:
-        endpoint = get_endpoint("orders", [start, counter])
+        endpoint = get_endpoint("orders", [start, page_number])
         print(endpoint)
         orders = wcapi.get(endpoint).json()
         for order in orders:
@@ -88,8 +88,11 @@ def sync_orders(STATE, catalog):
             if("date_created" in order) and (order["date_created"] > start):
                 last_update = order["date_created"]
             order = filter_order(order)
-            print(order)
-        break
+            singer.write_record("orders", order)
+        if len(orders) < 10:
+            break
+        else:
+            page_number +=1
 
 @attr.s
 class Stream(object):
