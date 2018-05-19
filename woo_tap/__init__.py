@@ -22,16 +22,25 @@ CONFIG = {
     "url": None,
     "consumer_key": None,
     "consumer_secret": None,
-    "after":None
+    "start_date":None
 }
 
-# ENDPOINTS = {
-#     "orders":"/wp-json/wc/v2/orders%s" % (urllib.urlencode(CONFIG.after))
-# }
+ENDPOINTS = {
+    "orders":"/wp-json/wc/v2/orders?after={0}"
+}
 
-def get_abs_path(path):
-    '''Returns the absolute path'''
-    return os.path.join(os.path.dirname(os.path.realpath(__file__)), path)
+def get_url(endpoint, kwargs):
+    '''Get the full url for the endpoint'''
+    if endpoint not in ENDPOINTS:
+        raise ValueError("Invalid endpoint {}".format(endpoint))
+
+    return BASE_URL + ENDPOINTS[endpoint].format(kwargs)
+
+def get_start(STATE, tap_stream_id, bookmark_key):
+    current_bookmark = singer.get_bookmark(STATE, tap_stream_id, bookmark_key)
+    if current_bookmark is None:
+        return CONFIG["start_date"]
+    return current_bookmark
 
 def load_schema(entity):
     '''Returns the schema for the specified source'''
@@ -39,9 +48,45 @@ def load_schema(entity):
 
     return schema
 
+def gen_request(STATE, endpoint, params=None):
+    '''Generate a request that will iterate through the results
+    and paginate through the responses until the amount of results
+    returned is less than 100, the amount returned by the API.
+    If the source has 'contact' in it, Autopilot API will provide a
+    'bookmark' property at the top level that is used to paginate
+    results
+    The API only returns bookmarks for iterating through contacts
+    '''
+    params = params or {}
+
+    source = parse_source_from_url(endpoint)
+    source_key = parse_key_from_source(source)
+
+    with metrics.record_counter(source) as counter:
+        while True:
+            data = request(endpoint, params).json()
+            if 'contact' in source:
+                if "bookmark" in data:
+                    params["bookmark"] = data["bookmark"]
+
+                else:
+                    params = {}
+
+            for row in data[source_key]:
+                counter.increment()
+                yield row
+            
+            if len(data[source_key]) < PER_PAGE:
+                params = {}
+                break
+
 def sync_orders(STATE, catalog):
-    #this is where you make a call to woocommerce
-    return STATE
+    schema = load_schema("orders")
+    singer.write_schema("orders", schema, ["id"], catalog.stream_alias)
+
+    start = get_start(STATE, "contacts", "start_date")
+    print(start)
+    max_updated_at = start
 
 @attr.s
 class Stream(object):
@@ -51,9 +96,6 @@ class Stream(object):
 STREAMS = [
     Stream("orders", sync_orders)
 ]
-
-def get_abs_path(path):
-    return os.path.join(os.path.dirname(os.path.realpath(__file__)), path)
 
 def get_streams_to_sync(streams, state):
     '''Get the streams to sync'''
@@ -75,7 +117,7 @@ def get_selected_streams(remaining_streams, annotated_schema):
         for stream_idx, annotated_stream in enumerate(annotated_schema.streams):
             if tap_stream_id == annotated_stream.tap_stream_id:
                 schema = annotated_stream.schema
-                if "selected" in schema and schema.selected is True:
+                if (hasattr(schema, "selected")) and (schema.selected is True):
                     selected_streams.append(stream)
 
     return selected_streams
@@ -88,8 +130,7 @@ def do_sync(STATE, catalogs):
         LOGGER.info("No Streams selected, please check that you have a schema selected in your catalog")
         return
 
-    LOGGER.info("Starting sync. Will sync these streams: %s",
-                [stream.tap_stream_id for stream in selected_streams])
+    LOGGER.info("Starting sync. Will sync these streams: %s", [stream.tap_stream_id for stream in selected_streams])
 
     for stream in selected_streams:
         LOGGER.info("Syncing %s", stream.tap_stream_id)
@@ -97,15 +138,18 @@ def do_sync(STATE, catalogs):
         singer.write_state(STATE)
 
         try:
-            catalog = [c for c in catalogs.get('streams')
-                       if c.get('stream') == stream.tap_stream_id][0]
+            catalog = [cat for cat in catalogs.streams if cat.stream == stream.tap_stream_id][0]
             STATE = stream.sync(STATE, catalog)
         except SourceUnavailableException:
             pass
 
-    singer.set_currently_syncing(STATE, None)
-    singer.write_state(STATE)
-    LOGGER.info("Sync completed")
+    # singer.set_currently_syncing(STATE, None)
+    # singer.write_state(STATE)
+    # LOGGER.info("Sync completed")
+
+def get_abs_path(path):
+    '''Returns the absolute path'''
+    return os.path.join(os.path.dirname(os.path.realpath(__file__)), path)
 
 def load_discovered_schema(stream):
     '''Attach inclusion automatic to each schema'''
