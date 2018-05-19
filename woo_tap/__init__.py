@@ -76,7 +76,6 @@ def get_selected_streams(remaining_streams, annotated_schema):
             if tap_stream_id == annotated_stream.tap_stream_id:
                 schema = annotated_stream.schema
                 if "selected" in schema and schema.selected is True:
-
                     selected_streams.append(stream)
 
     return selected_streams
