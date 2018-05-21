@@ -1,0 +1,16 @@
+attrs==18.1.0
+backoff==1.3.2
+certifi==2018.4.16
+chardet==3.0.4
+idna==2.6
+jsonschema==2.6.0
+ordereddict==1.1
+python-dateutil==2.7.3
+pytz==2018.4
+requests==2.18.4
+simplejson==3.11.1
+singer-python==5.1.1
+six==1.11.0
+urllib3==1.22
+-e git+https://github.com/yalelikeyale/woo-tap.git@a335f237934f677e6d53c027a111e395e1422b26#egg=woo_tap
+WooCommerce==1.2.1

@@ -74,25 +74,32 @@ def sync_orders(STATE, catalog):
         version="wc/v2"
     )
     schema = load_schema("orders")
-    singer.write_schema("orders", schema, ["order_id"], catalog.stream_alias)
+    #what is stream alias
+    singer.write_schema("orders", schema, ["order_id"])
 
-    start = get_start(STATE, "contacts", "start_date")
+    start = get_start(STATE, "contacts", "last_update")
+    LOGGER.info("Only syncing contacts updated since " + start)
     last_update = start
     page_number = 1
-    while True:
-        endpoint = get_endpoint("orders", [start, page_number])
-        print(endpoint)
-        orders = wcapi.get(endpoint).json()
-        for order in orders:
-            #prob need to convert dates to insure they are comparable
-            if("date_created" in order) and (order["date_created"] > start):
-                last_update = order["date_created"]
-            order = filter_order(order)
-            singer.write_record("orders", order)
-        if len(orders) < 10:
-            break
-        else:
-            page_number +=1
+    with metrics.record_counter("orders") as counter:
+        while True:
+            counter.increment()
+            endpoint = get_endpoint("orders", [start, page_number])
+            LOGGER.info("GET %s", endpoint)
+            orders = wcapi.get(endpoint).json()
+            for order in orders:
+                if("date_created" in order) and (order["date_created"] > last_update):
+                    last_update = order["date_created"]
+                order = filter_order(order)
+                singer.write_record("orders", order)
+            if len(orders) < 10:
+                break
+            else:
+                page_number +=1
+    STATE = singer.write_bookmark(STATE, 'orders', 'last_update', last_update) 
+    singer.write_state(STATE)
+    LOGGER.info("Completed Contacts Sync")
+    return STATE
 
 @attr.s
 class Stream(object):
@@ -148,10 +155,6 @@ def do_sync(STATE, catalogs):
             STATE = stream.sync(STATE, catalog)
         except SourceUnavailableException:
             pass
-
-    # singer.set_currently_syncing(STATE, None)
-    # singer.write_state(STATE)
-    # LOGGER.info("Sync completed")
 
 def get_abs_path(path):
     '''Returns the absolute path'''
