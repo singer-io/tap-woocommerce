@@ -29,7 +29,7 @@ CONFIG = {
 }
 
 ENDPOINTS = {
-    "orders":"wp-json/wc/v2/orders?after={0}&per_page=100&page={1}"
+    "orders":"wp-json/wc/v2/orders?after={0}&orderby=date&order=asc&per_page=100&page={1}"
 }
 
 def get_endpoint(endpoint, kwargs):
