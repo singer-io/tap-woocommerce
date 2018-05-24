@@ -7,13 +7,16 @@ import re
 import json
 import attr
 import urllib
-import dateutil.parser
+import requests
+import backoff
+from requests.auth import HTTPBasicAuth
 import singer
 import singer.metrics as metrics
 from singer import utils
-from singer import (UNIX_MILLISECONDS_INTEGER_DATETIME_PARSING,
-                    _transform_datetime)
-from woocommerce import API
+import datetime
+import dateutil
+from dateutil import parser
+
 
 REQUIRED_CONFIG_KEYS = ["url", "consumer_key", "consumer_secret", "start_date"]
 LOGGER = singer.get_logger()
@@ -26,7 +29,7 @@ CONFIG = {
 }
 
 ENDPOINTS = {
-    "orders":"orders?after={0}&page={1}"
+    "orders":"wp-json/wc/v2/orders?after={0}&per_page=100&page={1}"
 }
 
 def get_endpoint(endpoint, kwargs):
@@ -36,7 +39,7 @@ def get_endpoint(endpoint, kwargs):
     
     after = urllib.parse.quote(kwargs[0])
     page = kwargs[1]
-    return ENDPOINTS[endpoint].format(after,page)
+    return CONFIG["url"]+ENDPOINTS[endpoint].format(after,page)
 
 def get_start(STATE, tap_stream_id, bookmark_key):
     current_bookmark = singer.get_bookmark(STATE, tap_stream_id, bookmark_key)
@@ -50,35 +53,54 @@ def load_schema(entity):
 
     return schema
 
-def filter_order(order):
+def filter_items(item):
     filtered = {
-        "order_id":order["id"],
-        "order_key":order["order_key"],
-        "status":order["status"],
-        "date_created":order["date_created"],
-        "date_modified":order["date_modified"],
-        "discount_total":order["discount_total"],
-        "shipping_total":order["shipping_total"],
-        "total":order["total"],
-        "line_items":order["line_items"]
+        "id":int(item["id"]),
+        "name":str(item["name"]),
+        "product_id":int(item["product_id"]),
+        "variation_id":int(item["variation_id"]),
+        "quantity":int(item["quantity"]),
+        "subtotal":float(item["subtotal"]),
+        "subtotal_tax":float(item["subtotal_tax"]),
+        "total":float(item["total"]),
+        "sku":str(item["sku"]),
+        "price":float(item["price"])
+    }
+
+def filter_order(order):
+    tzinfo = parser.parse(CONFIG["start_date"]).tzinfo
+    line_items = [filter_items(item) for item in order["line_items"]]
+    filtered = {
+        "order_id":int(order["id"]),
+        "order_key":str(order["order_key"]),
+        "status":str(order["status"]),
+        "date_created":parser.parse(order["date_created"]).replace(tzinfo=tzinfo).isoformat(),
+        "date_modified":parser.parse(order["date_modified"]).replace(tzinfo=tzinfo).isoformat(),
+        "discount_total":float(order["discount_total"]),
+        "shipping_total":float(order["shipping_total"]),
+        "total":float(order["total"]),
+        "line_items":line_items
     }
     return filtered
 
+def giveup(exc):
+    return exc.response is not None \
+        and 400 <= exc.response.status_code < 500 \
+        and exc.response.status_code != 429
+
+@utils.backoff((backoff.expo,requests.exceptions.RequestException),giveup)
+@utils.ratelimit(20, 1)
+def gen_request(url):
+    resp = requests.get(url, auth=HTTPBasicAuth(CONFIG["consumer_key"], CONFIG["consumer_secret"])).json()
+    return resp
 
 def sync_orders(STATE, catalog):
-    wcapi = API(
-        url=CONFIG["url"],
-        consumer_key=CONFIG["consumer_key"],
-        consumer_secret=CONFIG["consumer_secret"],
-        wp_api=True,
-        version="wc/v2"
-    )
     schema = load_schema("orders")
-    #what is stream alias
+
     singer.write_schema("orders", schema, ["order_id"])
 
-    start = get_start(STATE, "contacts", "last_update")
-    LOGGER.info("Only syncing contacts updated since " + start)
+    start = get_start(STATE, "orders", "last_update")
+    LOGGER.info("Only syncing orders updated since " + start)
     last_update = start
     page_number = 1
     with metrics.record_counter("orders") as counter:
@@ -86,19 +108,19 @@ def sync_orders(STATE, catalog):
             counter.increment()
             endpoint = get_endpoint("orders", [start, page_number])
             LOGGER.info("GET %s", endpoint)
-            orders = wcapi.get(endpoint).json()
+            orders = gen_request(endpoint)
             for order in orders:
-                if("date_created" in order) and (order["date_created"] > last_update):
-                    last_update = order["date_created"]
                 order = filter_order(order)
+                if("date_created" in order) and (parser.parse(order["date_created"]) > parser.parse(last_update)):
+                    last_update = order["date_created"]
                 singer.write_record("orders", order)
-            if len(orders) < 10:
+            if len(orders) < 100:
                 break
             else:
                 page_number +=1
     STATE = singer.write_bookmark(STATE, 'orders', 'last_update', last_update) 
     singer.write_state(STATE)
-    LOGGER.info("Completed Contacts Sync")
+    LOGGER.info("Completed Orders Sync")
     return STATE
 
 @attr.s

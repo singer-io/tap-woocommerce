@@ -103,3 +103,4 @@ singer-check-tap-data
 state.json
 
 catalog.json
+target-config.json
