@@ -66,6 +66,7 @@ def filter_items(item):
         "sku":str(item["sku"]),
         "price":float(item["price"])
     }
+    return filtered
 
 def filter_order(order):
     tzinfo = parser.parse(CONFIG["start_date"]).tzinfo
@@ -88,15 +89,18 @@ def giveup(exc):
         and 400 <= exc.response.status_code < 500 \
         and exc.response.status_code != 429
 
-@utils.backoff((backoff.expo,requests.exceptions.RequestException),giveup)
+@utils.backoff((backoff.expo,requests.exceptions.RequestException), giveup)
 @utils.ratelimit(20, 1)
-def gen_request(url):
-    resp = requests.get(url, auth=HTTPBasicAuth(CONFIG["consumer_key"], CONFIG["consumer_secret"])).json()
-    return resp
+def gen_request(stream_id, url):
+    with metrics.http_request_timer(stream_id) as timer:
+        resp = requests.get(url, auth=HTTPBasicAuth(CONFIG["consumer_key"], CONFIG["consumer_secret"]))
+        timer.tags[metrics.Tag.http_status_code] = resp.status_code
+        resp.raise_for_status()
+        return resp.json()
+
 
 def sync_orders(STATE, catalog):
     schema = load_schema("orders")
-
     singer.write_schema("orders", schema, ["order_id"])
 
     start = get_start(STATE, "orders", "last_update")
@@ -105,11 +109,11 @@ def sync_orders(STATE, catalog):
     page_number = 1
     with metrics.record_counter("orders") as counter:
         while True:
-            counter.increment()
             endpoint = get_endpoint("orders", [start, page_number])
             LOGGER.info("GET %s", endpoint)
-            orders = gen_request(endpoint)
+            orders = gen_request("orders",endpoint)
             for order in orders:
+                counter.increment()
                 order = filter_order(order)
                 if("date_created" in order) and (parser.parse(order["date_created"]) > parser.parse(last_update)):
                     last_update = order["date_created"]
@@ -175,8 +179,9 @@ def do_sync(STATE, catalogs):
         try:
             catalog = [cat for cat in catalogs.streams if cat.stream == stream.tap_stream_id][0]
             STATE = stream.sync(STATE, catalog)
-        except SourceUnavailableException:
-            pass
+        except Exception as e:
+            LOGGER.critical(e)
+            raise e
 
 def get_abs_path(path):
     '''Returns the absolute path'''
