@@ -6,9 +6,9 @@ spec](https://github.com/singer-io/getting-started/blob/master/SPEC.md).
 
 This tap:
 
-- Pulls raw data from [FIXME](http://example.com)
+- Pulls raw data from [WooCommerce](http://woocommerce.github.io/woocommerce-rest-api-docs/)
 - Extracts the following resources:
-  - [FIXME](http://example.com)
+  - [List-Orders](http://woocommerce.github.io/woocommerce-rest-api-docs/#list-all-orders)
 - Outputs the schema for each resource
 - Incrementally pulls data based on the input state
 
