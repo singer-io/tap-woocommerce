@@ -1,0 +1,6 @@
+{
+  "url":"root_url_of_woocom_website",
+  "consumer_key":"ck_woocommerce",
+  "consumer_secret":"cs_woocommerce",
+  "start_date":"ISO8601-Date-String"
+}
