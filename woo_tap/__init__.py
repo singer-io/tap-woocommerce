@@ -68,9 +68,38 @@ def filter_items(item):
     }
     return filtered
 
+def filter_coupons(coupon):
+    filtered = {
+        "id":int(coupon["id"]),
+        "code":str(coupon["code"]),
+        "discount":float(coupon["discount"])
+    }
+    return filtered
+
+def filter_shipping(ship):
+    filtered = {
+        "id":int(ship["id"]),
+        "method_title":str(ship["method_title"]),
+        "method_id":str(ship["method_id"]),
+        "total":float(ship["total"])
+    }
+    return filtered
+
 def filter_order(order):
     tzinfo = parser.parse(CONFIG["start_date"]).tzinfo
-    line_items = [filter_items(item) for item in order["line_items"]]
+    if "line_items" in order and len(order["line_items"])>0:
+        line_items = [filter_items(item) for item in order["line_items"]]
+    else:
+        line_items = None
+    if "coupon_lines" in order and len(order["coupon_lines"])>0:
+        coupon_lines = [filter_coupons(coupon) for coupon in order["coupon_lines"]]
+    else:
+        coupon_lines = None
+    if "shippng_lines" in order and len(order["shipping_lines"])>0:
+        shipping_lines = [filter_shipping(ship) for ship in order["shipping_lines"]]
+    else:
+        shipping_lines = None
+
     filtered = {
         "order_id":int(order["id"]),
         "order_key":str(order["order_key"]),

@@ -64,6 +64,43 @@
                     }
                 }
             }
+        },
+        "shipping_lines":{
+            "type":["null","array"],
+            "items":{
+                "type":["null","object"],
+                "properties":{
+                    "id":{
+                        "type":["null","number"]
+                    },
+                    "method_title":{
+                        "type":["null","string"]
+                    },
+                    "method_id":{
+                        "type":["null","string"]
+                    },
+                    "total":{
+                        "type":["null","number"]
+                    }
+                }
+            }
+        },
+        "coupon_lines":{
+            "type":["null","array"],
+            "items":{
+                "type":["null","object"],
+                "properties":{
+                    "id":{
+                        "type":["null","number"]
+                    },
+                    "code":{
+                        "type":["null","string"]
+                    },
+                    "discount":{
+                        "type":["null","number"]
+                    }
+                }
+            }
         }
     }
 }
