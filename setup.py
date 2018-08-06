@@ -2,24 +2,24 @@
 from setuptools import setup
 
 setup(
-    name="woo-tap",
+    name="tap-woocommerce",
     version="0.1.0",
     description="Singer.io tap for extracting data",
     author="Stitch",
     url="http://singer.io",
     classifiers=["Programming Language :: Python :: 3 :: Only"],
-    py_modules=["woo_tap"],
+    py_modules=["tap_woocommerce"],
     install_requires=[
         "singer-python>=5.0.12",
         "requests",
     ],
     entry_points="""
     [console_scripts]
-    woo-tap=woo_tap:main
+    tap-woocommerce=tap_woocommerce:main
     """,
-    packages=["woo_tap"],
+    packages=["tap_woocommerce"],
     package_data = {
-        "schemas": ["woo_tap/schemas/*.json"]
+        "schemas": ["tap_woocommerce/schemas/*.json"]
     },
     include_package_data=True,
 )

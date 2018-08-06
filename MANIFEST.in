@@ -1,1 +1,1 @@
-include woo_tap/schemas/*.json
+include tap_woocommerce/schemas/*.json
