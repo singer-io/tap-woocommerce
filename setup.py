@@ -10,8 +10,11 @@ setup(
     classifiers=["Programming Language :: Python :: 3 :: Only"],
     py_modules=["tap_woocommerce"],
     install_requires=[
-        "singer-python>=5.0.12",
-        "requests",
+        'attrs==18.1.0',
+        'backoff==1.3.2',
+        'python-dateutil==2.7.3',
+        'requests==2.18.4',
+        'singer-python==5.0.15',
     ],
     entry_points="""
     [console_scripts]
