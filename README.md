@@ -1,4 +1,4 @@
-# woo-tap
+# tap-woocommerce
 
 This is a [Singer](https://singer.io) tap that produces JSON-formatted data
 following the [Singer
@@ -31,7 +31,7 @@ Usage:
 2. Discover
 
 ```
-$woo-tap --config config.json --discover >> catalog.json
+$tap-woocommerce --config config.json --discover >> catalog.json
 ```
 - Run the above to discover the data points the tap supports for each of Woocommerce's endpoints (currently only List-Orders)
 
@@ -53,7 +53,7 @@ $woo-tap --config config.json --discover >> catalog.json
 4.Run the tap
 
 ```
-$woo-tap --config config.json --catalog catalog.json
+$tap-woocommerce --config config.json --catalog catalog.json
 ```
 
 5.Run with Stitch Target
@@ -74,7 +74,7 @@ pip install target-stitch
 - Run tap with target
 
 ```
-woo-tap --config config.json --catalog catalog.json | target-stitch --config target-config.json
+tap-woocommerce --config config.json --catalog catalog.json | target-stitch --config target-config.json
 ```
 ---
 
